@@ -1,0 +1,17 @@
+<Plugin>
+  <!-- Required fields -->
+  <Name>Mains Power Monitor</Name>
+  <Overview>Uses a mains-powered Raspberry Pi as a proxy for mains/network availability while Unraid stays UPS-backed. After a configurable number of consecutive failed pings it records the outage and immediately triggers Unraid's native clean shutdown (powerdown), then sends one Warning-level recovery notification once connectivity returns, on the same boot or a later one. Important: this detects loss of a mains-powered network path, not mains voltage directly.</Overview>
+  <!-- NOTE: PluginURL must match exactly the URL of the pluginURL attribute in the .plg file -->
+  <PluginURL>https://raw.githubusercontent.com/RayMunro/unraid-mains-power-monitor/main/mains-power-monitor.plg</PluginURL>
+  <PluginAuthor>Ray Munro</PluginAuthor>
+
+  <!-- Optional entries -->
+  <!-- The .plg file already sets the support attribute, so <Support> here is ignored, left out to avoid duplication -->
+  <Project>https://github.com/RayMunro/unraid-mains-power-monitor</Project>
+  <ReadMe>https://raw.githubusercontent.com/RayMunro/unraid-mains-power-monitor/main/README.md</ReadMe>
+  <Category>Tools:</Category>
+  <MinVer>6.12.0</MinVer>
+  <IconFA>bolt</IconFA>
+  <License>GPL-3.0-or-later</License>
+</Plugin>

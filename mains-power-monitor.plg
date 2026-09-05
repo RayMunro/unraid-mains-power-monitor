@@ -1,0 +1,562 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name "mains-power-monitor">
+<!ENTITY author "Ray Munro">
+<!ENTITY version "2026.09.04d">
+<!ENTITY plgdir "/usr/local/emhttp/plugins/&name;">
+<!ENTITY cfgdir "/boot/config/plugins/&name;">
+<!ENTITY github "RayMunro/unraid-mains-power-monitor">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+]>
+<PLUGIN name="&name;" author="&author;" version="&version;" min="6.12.0" icon="bolt"
+        pluginURL="&pluginURL;"
+        support="https://github.com/&github;/issues"
+        project="https://github.com/&github;"
+        readme="https://github.com/&github;#readme">
+<CHANGES>
+### 2026.09.04d
+- Fixed Apply and Test Notification producing a blank/white page on current Unraid versions.
+- Both Settings-page POST forms now include Unraid's required CSRF token.
+- Existing settings and outage history are preserved during upgrade.
+
+### 2026.09.04c
+- After the configured consecutive Raspberry Pi failures (default 4), persists the outage and immediately initiates Unraid's native clean shutdown using `powerdown`.
+- Shutdown is requested only after the outage record is safely written to flash.
+- Pending outage/reboot recovery behaviour from 2026.09.04b is retained.
+- Recovery reports remain Warning-level Unraid notifications for delivery through configured agents.
+- Settings page now makes the automatic shutdown behaviour explicit.
+
+### 2026.09.04b
+- Recovery reports are always Warning-level Unraid notifications so configured agents can deliver them to phones and other endpoints.
+- Pending outages now survive a complete Unraid shutdown/reboot.
+- Records the Unraid stop/shutdown time when an outage is pending.
+- On the next boot, recognises the same pending outage and waits for the Raspberry Pi/network to return before reporting it.
+- Recovery report includes outage detection, Unraid stop/shutdown time when available, approximate restart time, connectivity-confirmed time and duration.
+- Makes clear when exact mains-restoration time cannot be known because Unraid was itself powered off.
+
+### 2026.09.04a
+- Added delayed outage reporting for networks where the router, switches and Raspberry Pi are not UPS-backed.
+- Outage start is persisted on the Unraid flash drive while the LAN is unavailable.
+- Sends one summary after recovery with detected loss time, restoration time and duration.
+
+### 2026.09.04
+- Initial release.
+</CHANGES>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/MainsPowerMonitor.page">
+<INLINE><![CDATA[
+Menu="Settings:90"
+Title="Mains Power Monitor"
+Icon="bolt"
+---
+<?php
+$name = 'mains-power-monitor';
+$cfgDir = "/boot/config/plugins/$name";
+$cfgFile = "$cfgDir/$name.cfg";
+$stateFile = "/var/local/$name/state";
+$pendingFile = "$cfgDir/pending-outage";
+$lastFile = "$cfgDir/last-outage";
+$rc = "/usr/local/emhttp/plugins/$name/scripts/rc.$name";
+$test = "/usr/local/emhttp/plugins/$name/scripts/test-notification";
+
+function load_kv($path) {
+    $out = [];
+    if (!is_file($path)) return $out;
+    foreach (file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        if (strpos($line, '=') === false) continue;
+        [$k, $v] = explode('=', $line, 2);
+        $v = trim($v);
+        if (strlen($v) >= 2 && $v[0] === '"' && substr($v, -1) === '"') {
+            $v = stripcslashes(substr($v, 1, -1));
+        }
+        $out[trim($k)] = $v;
+    }
+    return $out;
+}
+
+function q($s) { return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
+function cfg_line($k, $v) { return $k . '="' . addcslashes((string)$v, "\\\"") . "\"\n"; }
+
+$msg = '';
+$err = '';
+$rawCfg = load_kv($cfgFile);
+$cfg = array_merge([
+    'ENABLED' => 'no',
+    'TARGET_IP' => '10.10.20.5',
+    'CHECK_INTERVAL' => '5',
+    'PING_TIMEOUT' => '2',
+    'FAIL_THRESHOLD' => '4',
+    'RECOVERY_THRESHOLD' => '2',
+], $rawCfg);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? 'save';
+
+    if ($action === 'test') {
+        exec(escapeshellcmd($test) . ' >/dev/null 2>&1');
+        $msg = 'Test notification queued through Unraid.';
+    } elseif ($action === 'save') {
+        $enabled = (($_POST['enabled'] ?? 'no') === 'yes') ? 'yes' : 'no';
+        $ip = trim($_POST['target_ip'] ?? '');
+        $interval = (int)($_POST['check_interval'] ?? 5);
+        $timeout = (int)($_POST['ping_timeout'] ?? 2);
+        $fail = (int)($_POST['fail_threshold'] ?? 4);
+        $recover = (int)($_POST['recovery_threshold'] ?? 2);
+
+        if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $err = 'Please enter a valid IPv4 address for the Raspberry Pi.';
+        } elseif ($interval < 2 || $interval > 300) {
+            $err = 'Check interval must be between 2 and 300 seconds.';
+        } elseif ($timeout < 1 || $timeout > 10) {
+            $err = 'Ping timeout must be between 1 and 10 seconds.';
+        } elseif ($fail < 1 || $fail > 60 || $recover < 1 || $recover > 60) {
+            $err = 'Failure and recovery thresholds must be between 1 and 60 checks.';
+        } else {
+            if (!is_dir($cfgDir)) mkdir($cfgDir, 0755, true);
+            $body = '';
+            $body .= cfg_line('ENABLED', $enabled);
+            $body .= cfg_line('TARGET_IP', $ip);
+            $body .= cfg_line('CHECK_INTERVAL', $interval);
+            $body .= cfg_line('PING_TIMEOUT', $timeout);
+            $body .= cfg_line('FAIL_THRESHOLD', $fail);
+            $body .= cfg_line('RECOVERY_THRESHOLD', $recover);
+            file_put_contents($cfgFile, $body, LOCK_EX);
+            @chmod($cfgFile, 0644);
+            exec(escapeshellcmd($rc) . ' restart >/dev/null 2>&1');
+            $msg = 'Settings saved and monitor restarted.';
+            $cfg = array_merge($cfg, load_kv($cfgFile));
+        }
+    }
+}
+
+$state = load_kv($stateFile);
+$pending = load_kv($pendingFile);
+$last = load_kv($lastFile);
+$status = $state['STATUS'] ?? 'UNKNOWN';
+$detail = $state['DETAIL'] ?? 'No status has been recorded yet.';
+$updated = $state['UPDATED'] ?? 'Never';
+$statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $status === 'ERROR' || $status === 'SHUTTING_DOWN') ? 'red' : (($status === 'RECOVERED') ? '#d58512' : '#888'));
+?>
+
+<style>
+.mpm-card{max-width:920px;padding:18px 22px;border:1px solid #ccc;border-radius:8px;margin:12px 0 22px 0}
+.mpm-status{font-size:22px;font-weight:600;margin-bottom:6px}
+.mpm-grid{display:grid;grid-template-columns:270px minmax(240px,420px);gap:12px 18px;align-items:center}
+.mpm-grid input[type=text],.mpm-grid input[type=number],.mpm-grid select{width:100%}
+.mpm-actions{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap}
+.mpm-note{color:#777;margin-top:8px;line-height:1.45}
+.mpm-kv{display:grid;grid-template-columns:180px 1fr;gap:7px 14px;margin-top:12px}
+</style>
+
+<?php if ($msg): ?><div class="notice"><?=q($msg)?></div><?php endif; ?>
+<?php if ($err): ?><div class="error"><?=q($err)?></div><?php endif; ?>
+
+<div class="mpm-card">
+  <div class="mpm-status">Current status: <span style="color:<?=q($statusClass)?>"><?=q($status)?></span></div>
+  <div><?=q($detail)?></div>
+  <div class="mpm-note">Last updated: <?=q($updated)?></div>
+  <?php if (!empty($pending['START_TEXT'])): ?>
+  <div class="mpm-kv">
+    <b>Pending outage began</b><span><?=q($pending['START_TEXT'])?></span>
+    <b>Report status</b><span>Saved locally. A Warning summary will be sent after connectivity returns, even if Unraid reboots first.</span>
+    <?php if (!empty($pending['SHUTDOWN_TEXT'])): ?><b>Unraid stopped/shut down</b><span><?=q($pending['SHUTDOWN_TEXT'])?></span><?php endif; ?>
+  </div>
+  <?php endif; ?>
+</div>
+
+<form method="post">
+<input type="hidden" name="csrf_token" value="<?=q($var['csrf_token'] ?? '')?>">
+<input type="hidden" name="action" value="save">
+<div class="mpm-grid">
+  <label for="enabled">Enable monitoring</label>
+  <select id="enabled" name="enabled">
+    <option value="yes" <?=($cfg['ENABLED'] ?? 'no') === 'yes' ? 'selected' : ''?>>Yes</option>
+    <option value="no" <?=($cfg['ENABLED'] ?? 'no') !== 'yes' ? 'selected' : ''?>>No</option>
+  </select>
+
+  <label for="target_ip">Raspberry Pi IPv4 address</label>
+  <input id="target_ip" name="target_ip" type="text" value="<?=q($cfg['TARGET_IP'] ?? '')?>" placeholder="10.10.20.5">
+
+  <label for="check_interval">Check interval (seconds)</label>
+  <input id="check_interval" name="check_interval" type="number" min="2" max="300" value="<?=q($cfg['CHECK_INTERVAL'] ?? '5')?>">
+
+  <label for="ping_timeout">Ping timeout (seconds)</label>
+  <input id="ping_timeout" name="ping_timeout" type="number" min="1" max="10" value="<?=q($cfg['PING_TIMEOUT'] ?? '2')?>">
+
+  <label for="fail_threshold">Failed checks before clean shutdown</label>
+  <input id="fail_threshold" name="fail_threshold" type="number" min="1" max="60" value="<?=q($cfg['FAIL_THRESHOLD'] ?? '4')?>">
+
+  <label for="recovery_threshold">Successful checks before recovery</label>
+  <input id="recovery_threshold" name="recovery_threshold" type="number" min="1" max="60" value="<?=q($cfg['RECOVERY_THRESHOLD'] ?? '2')?>">
+
+  <label>Recovery notification severity</label>
+  <div><b>Warning</b> — sent through Unraid's configured notification agents.</div>
+</div>
+
+<div class="mpm-actions"><button type="submit">Apply</button></div>
+</form>
+
+<form method="post" style="margin-top:10px">
+  <input type="hidden" name="csrf_token" value="<?=q($var['csrf_token'] ?? '')?>">
+  <input type="hidden" name="action" value="test">
+  <button type="submit">Send Test Notification</button>
+  <button type="button" onclick="location.reload()">Refresh Status</button>
+</form>
+
+<?php if (!empty($last['START_TEXT'])): ?>
+<div class="mpm-card">
+  <b>Last detected outage</b>
+  <div class="mpm-kv">
+    <b>Detected loss</b><span><?=q($last['START_TEXT'])?></span>
+    <?php if (!empty($last['SHUTDOWN_TEXT'])): ?><b>Unraid stopped/shut down</b><span><?=q($last['SHUTDOWN_TEXT'])?></span><?php endif; ?>
+    <?php if (($last['REBOOTED'] ?? 'no') === 'yes'): ?><b>Unraid restarted</b><span><?=q($last['RESTART_TEXT'] ?? 'Unknown')?></span><?php endif; ?>
+    <b>Connectivity confirmed</b><span><?=q($last['END_TEXT'] ?? 'Unknown')?></span>
+    <b>Loss-to-recovery interval</b><span><?=q($last['DURATION'] ?? 'Unknown')?></span>
+  </div>
+</div>
+<?php endif; ?>
+
+<div class="mpm-card">
+  <b>Designed for your network layout</b>
+  <div class="mpm-note">This mode assumes the Raspberry Pi, router and switches are on normal mains while Unraid remains UPS-backed. When the Pi reaches the configured consecutive-failure threshold, the outage is saved on the Unraid flash drive and the plugin immediately asks Unraid to perform its native clean shutdown. The shutdown is stamped into the pending record. On the next boot, once the Pi/network is reachable, Unraid sends one Warning summary through its configured notification agents.</div>
+  <div class="mpm-note"><b>Shutdown behaviour:</b> Reaching the failure threshold automatically powers down Unraid. With the default 5-second interval and four-failure threshold this is intentionally fast, so make sure the monitored Pi has a fixed IP and is normally reliable.</div>
+  <div class="mpm-note"><b>Limitation:</b> because the whole mains-powered network path disappears together, the plugin cannot distinguish a household mains cut from a reboot or failure of the router/switch/Pi. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
+</div>
+
+]]></INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/scripts/mains-power-monitor.sh">
+<INLINE><![CDATA[
+#!/bin/bash
+set -u
+
+NAME="mains-power-monitor"
+CFGDIR="/boot/config/plugins/${NAME}"
+CFG="${CFGDIR}/${NAME}.cfg"
+PENDING_FILE="${CFGDIR}/pending-outage"
+LAST_FILE="${CFGDIR}/last-outage"
+STATE_DIR="/var/local/${NAME}"
+STATE_FILE="${STATE_DIR}/state"
+PID_FILE="/var/run/${NAME}.pid"
+NOTIFY="/usr/local/emhttp/webGui/scripts/notify"
+BOOT_ID="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || printf unknown)"
+MONITOR_START_EPOCH="$(date +%s)"
+MONITOR_START_TEXT="$(date '+%Y-%m-%d %H:%M:%S')"
+
+mkdir -p "$STATE_DIR" "$CFGDIR"
+log() { logger -t "$NAME" -- "$*"; }
+
+load_cfg() {
+  ENABLED="no"; TARGET_IP=""; CHECK_INTERVAL="5"; PING_TIMEOUT="2"; FAIL_THRESHOLD="4"; RECOVERY_THRESHOLD="2"
+  [[ -f "$CFG" ]] && source "$CFG"
+}
+
+write_state() {
+  local status="$1" detail="$2" now
+  now="$(date '+%Y-%m-%d %H:%M:%S')"
+  umask 022
+  { printf 'STATUS="%s"\n' "$status"; printf 'DETAIL="%s"\n' "$detail"; printf 'UPDATED="%s"\n' "$now"; printf 'TARGET_IP="%s"\n' "$TARGET_IP"; } > "${STATE_FILE}.tmp"
+  mv -f "${STATE_FILE}.tmp" "$STATE_FILE"
+}
+
+send_warning() {
+  local subject="$1" description="$2"
+  [[ -x "$NOTIFY" ]] || { log "Notification script not found: $NOTIFY"; return 1; }
+  "$NOTIFY" -e "Unraid Mains Power Monitor" -s "$subject" -d "$description" -i "warning" >/dev/null 2>&1
+}
+
+format_duration() {
+  local total="$1" d h m s out=""
+  (( total < 0 )) && total=0
+  d=$((total/86400)); total=$((total%86400)); h=$((total/3600)); total=$((total%3600)); m=$((total/60)); s=$((total%60))
+  (( d > 0 )) && out+="${d}d "; (( h > 0 || d > 0 )) && out+="${h}h "; (( m > 0 || h > 0 || d > 0 )) && out+="${m}m "; out+="${s}s"
+  printf '%s' "$out"
+}
+
+write_pending() {
+  local start_epoch="$1" start_text="$2"
+  umask 022
+  {
+    printf 'START_EPOCH="%s"\n' "$start_epoch"
+    printf 'START_TEXT="%s"\n' "$start_text"
+    printf 'TARGET_IP="%s"\n' "$TARGET_IP"
+    printf 'DETECTED_BOOT_ID="%s"\n' "$BOOT_ID"
+    printf 'SHUTDOWN_EPOCH=""\n'
+    printf 'SHUTDOWN_TEXT=""\n'
+  } > "${PENDING_FILE}.tmp"
+  mv -f "${PENDING_FILE}.tmp" "$PENDING_FILE"
+}
+
+load_pending() {
+  START_EPOCH=""; START_TEXT=""; DETECTED_BOOT_ID=""; SHUTDOWN_EPOCH=""; SHUTDOWN_TEXT=""
+  if [[ -f "$PENDING_FILE" ]]; then
+    source "$PENDING_FILE"
+    [[ -n "${START_EPOCH:-}" && -n "${START_TEXT:-}" ]]
+    return $?
+  fi
+  return 1
+}
+
+write_last() {
+  local end_epoch="$1" end_text="$2" duration="$3" rebooted="$4" restart_text="$5"
+  umask 022
+  {
+    printf 'START_EPOCH="%s"\n' "$START_EPOCH"; printf 'START_TEXT="%s"\n' "$START_TEXT"
+    printf 'SHUTDOWN_EPOCH="%s"\n' "${SHUTDOWN_EPOCH:-}"; printf 'SHUTDOWN_TEXT="%s"\n' "${SHUTDOWN_TEXT:-}"
+    printf 'REBOOTED="%s"\n' "$rebooted"; printf 'RESTART_TEXT="%s"\n' "$restart_text"
+    printf 'END_EPOCH="%s"\n' "$end_epoch"; printf 'END_TEXT="%s"\n' "$end_text"; printf 'DURATION="%s"\n' "$duration"
+    printf 'TARGET_IP="%s"\n' "$TARGET_IP"
+  } > "${LAST_FILE}.tmp"
+  mv -f "${LAST_FILE}.tmp" "$LAST_FILE"
+}
+
+cleanup(){ rm -f "$PID_FILE"; }
+trap cleanup EXIT
+trap 'exit 0' INT TERM
+
+load_cfg
+[[ "$ENABLED" == "yes" ]] || { write_state "DISABLED" "Monitoring is disabled"; exit 0; }
+[[ -n "$TARGET_IP" ]] || { write_state "ERROR" "No target IP configured"; log "No target IP configured"; exit 1; }
+printf '%s\n' "$$" > "$PID_FILE"
+
+if load_pending; then
+  current="OFFLINE"
+  if [[ -n "${DETECTED_BOOT_ID:-}" && "$DETECTED_BOOT_ID" != "$BOOT_ID" ]]; then
+    write_state "RECOVERING" "A pending outage survived an Unraid shutdown/reboot; waiting for the Raspberry Pi/network"
+    log "Pending outage from $START_TEXT survived reboot; current boot=$BOOT_ID"
+  else
+    write_state "OFFLINE" "A mains/network outage is already recorded from $START_TEXT; waiting for the Raspberry Pi to return"
+    log "Resuming pending outage recorded at $START_TEXT"
+  fi
+else
+  current="UNKNOWN"
+  write_state "STARTING" "Waiting for first confirmed state"
+fi
+
+fail_count=0; success_count=0; candidate_start_epoch=""; candidate_start_text=""
+
+while true; do
+  load_cfg
+  [[ "$ENABLED" == "yes" ]] || { write_state "DISABLED" "Monitoring was disabled"; exit 0; }
+
+  if ping -n -c 1 -W "$PING_TIMEOUT" "$TARGET_IP" >/dev/null 2>&1; then
+    fail_count=0; candidate_start_epoch=""; candidate_start_text=""; success_count=$((success_count+1))
+
+    if [[ "$current" == "OFFLINE" && "$success_count" -ge "$RECOVERY_THRESHOLD" ]]; then
+      if load_pending; then
+        end_epoch="$(date +%s)"; end_text="$(date '+%Y-%m-%d %H:%M:%S')"; duration_seconds=$((end_epoch-START_EPOCH)); duration_text="$(format_duration "$duration_seconds")"
+        rebooted="no"; restart_text=""
+        [[ -n "${DETECTED_BOOT_ID:-}" && "$DETECTED_BOOT_ID" != "$BOOT_ID" ]] && { rebooted="yes"; restart_text="$MONITOR_START_TEXT"; }
+
+        if [[ "$rebooted" == "yes" ]]; then
+          description="Mains/network loss was detected at $START_TEXT."
+          [[ -n "${SHUTDOWN_TEXT:-}" ]] && description+=" Unraid stopped/shut down at $SHUTDOWN_TEXT while the outage was pending."
+          description+=" Unraid started again at approximately $restart_text, and the Raspberry Pi/network was confirmed reachable at $end_text. Time from detected loss until connectivity was confirmed again: $duration_text. Because Unraid was offline for part of this event, the exact mains-restoration time cannot be known."
+          subject="Mains Power Restored - Unraid Restarted"
+        else
+          description="Mains/network loss was detected at $START_TEXT and the Raspberry Pi/network was confirmed reachable again at $end_text. Detected outage duration: $duration_text."
+          subject="Mains Power Restored - Outage Recorded"
+        fi
+
+        write_state "RECOVERED" "Connectivity restored; sending Warning notification ($duration_text)"
+        if send_warning "$subject" "$description"; then
+          write_last "$end_epoch" "$end_text" "$duration_text" "$rebooted" "$restart_text"
+          rm -f "$PENDING_FILE"
+          current="ONLINE"
+          write_state "ONLINE" "Mains/network restored; Warning notification sent; last detected outage lasted $duration_text"
+          log "Warning recovery report sent; start=$START_TEXT end=$end_text duration=$duration_text rebooted=$rebooted"
+        else
+          write_state "RECOVERED" "Connectivity restored, but Warning notification could not be queued; retrying"
+          log "Warning notification command failed after recovery; pending outage retained"
+        fi
+      else
+        current="ONLINE"; write_state "ONLINE" "Raspberry Pi is reachable; no pending outage record found"
+      fi
+    elif [[ "$current" == "UNKNOWN" && "$success_count" -ge "$RECOVERY_THRESHOLD" ]]; then
+      current="ONLINE"; write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"; log "Initial state confirmed online"
+    elif [[ "$current" == "ONLINE" ]]; then
+      write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"
+    fi
+  else
+    success_count=0; fail_count=$((fail_count+1))
+    if [[ -z "$candidate_start_epoch" ]]; then candidate_start_epoch="$(date +%s)"; candidate_start_text="$(date '+%Y-%m-%d %H:%M:%S')"; fi
+    if [[ "$current" != "OFFLINE" && "$fail_count" -ge "$FAIL_THRESHOLD" ]]; then
+      current="OFFLINE"; write_pending "$candidate_start_epoch" "$candidate_start_text"
+      write_state "SHUTTING_DOWN" "Mains/network loss confirmed at $candidate_start_text after $fail_count failed checks; initiating clean Unraid shutdown"
+      log "Target unreachable for $fail_count checks; outage persisted from $candidate_start_text; initiating clean shutdown"
+
+      # The mains-powered LAN is already unavailable, so a phone notification may not be deliverable now.
+      # Persist first, then ask Unraid to perform its native clean shutdown. The stopping_svcs event
+      # stamps the pending record, and the next boot sends the Warning recovery report once networking returns.
+      if command -v powerdown >/dev/null 2>&1; then
+        nohup powerdown >/dev/null 2>&1 &
+      elif [[ -x /usr/local/sbin/powerdown ]]; then
+        nohup /usr/local/sbin/powerdown >/dev/null 2>&1 &
+      else
+        write_state "ERROR" "Mains/network loss confirmed, but Unraid powerdown command was not found"
+        log "ERROR: powerdown command not found; clean shutdown could not be initiated"
+        exit 1
+      fi
+      exit 0
+    elif [[ "$current" == "ONLINE" ]]; then
+      write_state "ONLINE" "Transient ping failure (${fail_count}/${FAIL_THRESHOLD}); outage not yet declared"
+    elif [[ "$current" == "OFFLINE" ]]; then
+      load_pending && write_state "OFFLINE" "Mains/network outage remains active; recorded from $START_TEXT"
+    else
+      write_state "STARTING" "Waiting for confirmation (${fail_count}/${FAIL_THRESHOLD} failed checks)"
+    fi
+  fi
+  sleep "$CHECK_INTERVAL"
+done
+]]></INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/scripts/rc.mains-power-monitor">
+<INLINE><![CDATA[
+#!/bin/bash
+NAME="mains-power-monitor"
+SCRIPT="/usr/local/emhttp/plugins/${NAME}/scripts/${NAME}.sh"
+CFG="/boot/config/plugins/${NAME}/${NAME}.cfg"
+PID_FILE="/var/run/${NAME}.pid"
+STATE_DIR="/var/local/${NAME}"
+
+is_running() {
+  [[ -f "$PID_FILE" ]] || return 1
+  local pid
+  pid="$(cat "$PID_FILE" 2>/dev/null)"
+  [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+start() {
+  if is_running; then
+    echo "$NAME is already running"
+    return 0
+  fi
+  mkdir -p "$STATE_DIR"
+  nohup "$SCRIPT" >/dev/null 2>&1 &
+  sleep 0.2
+  echo "$NAME started"
+}
+
+stop() {
+  if is_running; then
+    local pid
+    pid="$(cat "$PID_FILE")"
+    kill "$pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.2
+    done
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PID_FILE"
+  echo "$NAME stopped"
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  restart) stop; start ;;
+  status)
+    if is_running; then
+      echo "running (pid $(cat "$PID_FILE"))"
+      exit 0
+    else
+      echo "stopped"
+      exit 1
+    fi
+    ;;
+  *) echo "Usage: $0 {start|stop|restart|status}"; exit 2 ;;
+esac
+
+]]></INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/scripts/test-notification">
+<INLINE><![CDATA[
+#!/bin/bash
+NOTIFY="/usr/local/emhttp/webGui/scripts/notify"
+"$NOTIFY" -e "Unraid Mains Power Monitor" -s "Mains Monitor Test" -d "This is a test notification from the Mains Power Monitor plugin." -i "warning"
+
+]]></INLINE>
+</FILE>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/event/stopping_svcs">
+<INLINE><![CDATA[
+#!/bin/bash
+set -u
+NAME="mains-power-monitor"
+CFGDIR="/boot/config/plugins/${NAME}"
+PENDING_FILE="${CFGDIR}/pending-outage"
+
+# This event must never delay or block an Unraid stop/shutdown.
+[[ -f "$PENDING_FILE" ]] || exit 0
+
+START_EPOCH=""
+START_TEXT=""
+TARGET_IP=""
+DETECTED_BOOT_ID=""
+SHUTDOWN_EPOCH=""
+SHUTDOWN_TEXT=""
+source "$PENDING_FILE" 2>/dev/null || exit 0
+[[ -n "${START_EPOCH:-}" && -n "${START_TEXT:-}" ]] || exit 0
+
+# Only stamp the first stop/shutdown observed during this pending outage.
+if [[ -z "${SHUTDOWN_EPOCH:-}" ]]; then
+  SHUTDOWN_EPOCH="$(date +%s)"
+  SHUTDOWN_TEXT="$(date '+%Y-%m-%d %H:%M:%S')"
+  umask 022
+  {
+    printf 'START_EPOCH="%s"\n' "$START_EPOCH"
+    printf 'START_TEXT="%s"\n' "$START_TEXT"
+    printf 'TARGET_IP="%s"\n' "${TARGET_IP:-}"
+    printf 'DETECTED_BOOT_ID="%s"\n' "${DETECTED_BOOT_ID:-}"
+    printf 'SHUTDOWN_EPOCH="%s"\n' "$SHUTDOWN_EPOCH"
+    printf 'SHUTDOWN_TEXT="%s"\n' "$SHUTDOWN_TEXT"
+  } > "${PENDING_FILE}.tmp" && mv -f "${PENDING_FILE}.tmp" "$PENDING_FILE"
+  logger -t "$NAME" -- "Pending mains/network outage: Unraid stop/shutdown recorded at $SHUTDOWN_TEXT"
+fi
+exit 0
+
+]]></INLINE>
+</FILE>
+<FILE Run="/bin/bash">
+<INLINE><![CDATA[
+set -e
+NAME="mains-power-monitor"
+PLGDIR="/usr/local/emhttp/plugins/$NAME"
+CFGDIR="/boot/config/plugins/$NAME"
+CFG="$CFGDIR/$NAME.cfg"
+mkdir -p "$PLGDIR/scripts" "$PLGDIR/event" "$CFGDIR" "/var/local/$NAME"
+chmod 0755 "$PLGDIR/scripts/mains-power-monitor.sh" "$PLGDIR/scripts/rc.mains-power-monitor" "$PLGDIR/scripts/test-notification" "$PLGDIR/event/stopping_svcs"
+chmod 0644 "$PLGDIR/MainsPowerMonitor.page"
+if [[ ! -f "$CFG" ]]; then
+cat > "$CFG" <<'CFGEOF'
+ENABLED="no"
+TARGET_IP="10.10.20.5"
+CHECK_INTERVAL="5"
+PING_TIMEOUT="2"
+FAIL_THRESHOLD="4"
+RECOVERY_THRESHOLD="2"
+CFGEOF
+chmod 0644 "$CFG"
+fi
+"$PLGDIR/scripts/rc.$NAME" stop >/dev/null 2>&1 || true
+"$PLGDIR/scripts/rc.$NAME" start >/dev/null 2>&1 || true
+echo "-----------------------------------------------------------"
+echo " Mains Power Monitor installed"
+echo " Version: 2026.09.04d"
+echo " Recovery notifications: Warning via Unraid agents"
+echo " Auto-shutdown: after configured failed checks (default 4)"
+echo " Pending outages survive Unraid shutdown/reboot"
+echo " Settings: Settings -> Mains Power Monitor"
+echo "-----------------------------------------------------------"
+]]></INLINE>
+</FILE>
+<FILE Run="/bin/bash" Method="remove">
+<INLINE><![CDATA[
+NAME="mains-power-monitor"
+PLGDIR="/usr/local/emhttp/plugins/$NAME"
+if [[ -x "$PLGDIR/scripts/rc.$NAME" ]]; then "$PLGDIR/scripts/rc.$NAME" stop >/dev/null 2>&1 || true; fi
+rm -rf "$PLGDIR" "/var/local/$NAME"
+rm -f "/var/run/$NAME.pid"
+echo "Mains Power Monitor removed. Saved settings and outage history under /boot/config/plugins/$NAME are preserved."
+]]></INLINE>
+</FILE>
+</PLUGIN>

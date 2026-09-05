@@ -1,0 +1,34 @@
+#!/bin/bash
+set -u
+NAME="mains-power-monitor"
+CFGDIR="/boot/config/plugins/${NAME}"
+PENDING_FILE="${CFGDIR}/pending-outage"
+
+# This event must never delay or block an Unraid stop/shutdown.
+[[ -f "$PENDING_FILE" ]] || exit 0
+
+START_EPOCH=""
+START_TEXT=""
+TARGET_IP=""
+DETECTED_BOOT_ID=""
+SHUTDOWN_EPOCH=""
+SHUTDOWN_TEXT=""
+source "$PENDING_FILE" 2>/dev/null || exit 0
+[[ -n "${START_EPOCH:-}" && -n "${START_TEXT:-}" ]] || exit 0
+
+# Only stamp the first stop/shutdown observed during this pending outage.
+if [[ -z "${SHUTDOWN_EPOCH:-}" ]]; then
+  SHUTDOWN_EPOCH="$(date +%s)"
+  SHUTDOWN_TEXT="$(date '+%Y-%m-%d %H:%M:%S')"
+  umask 022
+  {
+    printf 'START_EPOCH="%s"\n' "$START_EPOCH"
+    printf 'START_TEXT="%s"\n' "$START_TEXT"
+    printf 'TARGET_IP="%s"\n' "${TARGET_IP:-}"
+    printf 'DETECTED_BOOT_ID="%s"\n' "${DETECTED_BOOT_ID:-}"
+    printf 'SHUTDOWN_EPOCH="%s"\n' "$SHUTDOWN_EPOCH"
+    printf 'SHUTDOWN_TEXT="%s"\n' "$SHUTDOWN_TEXT"
+  } > "${PENDING_FILE}.tmp" && mv -f "${PENDING_FILE}.tmp" "$PENDING_FILE"
+  logger -t "$NAME" -- "Pending mains/network outage: Unraid stop/shutdown recorded at $SHUTDOWN_TEXT"
+fi
+exit 0

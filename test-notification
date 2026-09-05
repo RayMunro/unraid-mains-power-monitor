@@ -1,0 +1,3 @@
+#!/bin/bash
+NOTIFY="/usr/local/emhttp/webGui/scripts/notify"
+"$NOTIFY" -e "Unraid Mains Power Monitor" -s "Mains Monitor Test" -d "This is a test notification from the Mains Power Monitor plugin." -i "warning"
