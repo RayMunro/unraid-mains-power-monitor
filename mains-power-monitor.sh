@@ -93,10 +93,10 @@ printf '%s\n' "$$" > "$PID_FILE"
 if load_pending; then
   current="OFFLINE"
   if [[ -n "${DETECTED_BOOT_ID:-}" && "$DETECTED_BOOT_ID" != "$BOOT_ID" ]]; then
-    write_state "RECOVERING" "A pending outage survived an Unraid shutdown/reboot; waiting for the Raspberry Pi/network"
+    write_state "RECOVERING" "A pending outage survived an Unraid shutdown/reboot; waiting for the monitored network device/network"
     log "Pending outage from $START_TEXT survived reboot; current boot=$BOOT_ID"
   else
-    write_state "OFFLINE" "A mains/network outage is already recorded from $START_TEXT; waiting for the Raspberry Pi to return"
+    write_state "OFFLINE" "A mains/network outage is already recorded from $START_TEXT; waiting for the monitored network device to return"
     log "Resuming pending outage recorded at $START_TEXT"
   fi
 else
@@ -122,10 +122,10 @@ while true; do
         if [[ "$rebooted" == "yes" ]]; then
           description="Mains/network loss was detected at $START_TEXT."
           [[ -n "${SHUTDOWN_TEXT:-}" ]] && description+=" Unraid stopped/shut down at $SHUTDOWN_TEXT while the outage was pending."
-          description+=" Unraid started again at approximately $restart_text, and the Raspberry Pi/network was confirmed reachable at $end_text. Time from detected loss until connectivity was confirmed again: $duration_text. Because Unraid was offline for part of this event, the exact mains-restoration time cannot be known."
+          description+=" Unraid started again at approximately $restart_text, and the monitored network device/network was confirmed reachable at $end_text. Time from detected loss until connectivity was confirmed again: $duration_text. Because Unraid was offline for part of this event, the exact mains-restoration time cannot be known."
           subject="Mains Power Restored - Unraid Restarted"
         else
-          description="Mains/network loss was detected at $START_TEXT and the Raspberry Pi/network was confirmed reachable again at $end_text. Detected outage duration: $duration_text."
+          description="Mains/network loss was detected at $START_TEXT and the monitored network device/network was confirmed reachable again at $end_text. Detected outage duration: $duration_text."
           subject="Mains Power Restored - Outage Recorded"
         fi
 
@@ -141,12 +141,12 @@ while true; do
           log "Warning notification command failed after recovery; pending outage retained"
         fi
       else
-        current="ONLINE"; write_state "ONLINE" "Raspberry Pi is reachable; no pending outage record found"
+        current="ONLINE"; write_state "ONLINE" "Monitored network device is reachable; no pending outage record found"
       fi
     elif [[ "$current" == "UNKNOWN" && "$success_count" -ge "$RECOVERY_THRESHOLD" ]]; then
-      current="ONLINE"; write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"; log "Initial state confirmed online"
+      current="ONLINE"; write_state "ONLINE" "Mains/network present; monitored network device is reachable"; log "Initial state confirmed online"
     elif [[ "$current" == "ONLINE" ]]; then
-      write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"
+      write_state "ONLINE" "Mains/network present; monitored network device is reachable"
     fi
   else
     success_count=0; fail_count=$((fail_count+1))

@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "mains-power-monitor">
 <!ENTITY author "Ray Munro">
-<!ENTITY version "2026.09.07">
+<!ENTITY version "2026.09.07b">
 <!ENTITY plgdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY cfgdir "/boot/config/plugins/&name;">
 <!ENTITY launch "Settings/MainsPowerMonitor">
@@ -15,6 +15,17 @@
         project="https://github.com/&github;"
         readme="https://github.com/&github;#readme">
 <CHANGES>
+### 2026.09.07b
+- Added a prominent Copyright © Raymond Munro 2026 notice to the Mains Power Monitor settings page.
+- Added the same copyright notice to the source README.
+
+### 2026.09.07a
+- Replaced device-specific terminology throughout with generic monitored network-device terminology.
+- The IPv4 field and instructions now make clear that the target must be a reliable network device that is NOT protected by an uninterruptible power supply (UPS).
+- Clarified that Mains Power Monitor is a workaround for UPS units that cannot directly report a mains power failure to the Unraid instance.
+- Clarified that loss of the monitored device or its network path is an inferred mains-failure signal and can also be caused by a device/network fault or reboot.
+- Monitoring, clean-shutdown, persistence and Warning recovery behaviour are unchanged.
+
 ### 2026.09.07
 - Moved Mains Power Monitor into the standard Settings -> User Utilities block.
 - The Settings screen now shows a compact clickable Mains Power Monitor icon/tile instead of rendering the full configuration form inline.
@@ -28,7 +39,7 @@
 - Existing settings and outage history are preserved during upgrade.
 
 ### 2026.09.04c
-- After the configured consecutive Raspberry Pi failures (default 4), persists the outage and immediately initiates Unraid's native clean shutdown using `powerdown`.
+- After the configured consecutive monitored network-device failures (default 4), persists the outage and immediately initiates Unraid's native clean shutdown using `powerdown`.
 - Shutdown is requested only after the outage record is safely written to flash.
 - Pending outage/reboot recovery behaviour from 2026.09.04b is retained.
 - Recovery reports remain Warning-level Unraid notifications for delivery through configured agents.
@@ -38,12 +49,12 @@
 - Recovery reports are always Warning-level Unraid notifications so configured agents can deliver them to phones and other endpoints.
 - Pending outages now survive a complete Unraid shutdown/reboot.
 - Records the Unraid stop/shutdown time when an outage is pending.
-- On the next boot, recognises the same pending outage and waits for the Raspberry Pi/network to return before reporting it.
+- On the next boot, recognises the same pending outage and waits for the monitored network device/network to return before reporting it.
 - Recovery report includes outage detection, Unraid stop/shutdown time when available, approximate restart time, connectivity-confirmed time and duration.
 - Makes clear when exact mains-restoration time cannot be known because Unraid was itself powered off.
 
 ### 2026.09.04a
-- Added delayed outage reporting for networks where the router, switches and Raspberry Pi are not UPS-backed.
+- Added delayed outage reporting for networks where the router, switches and monitored network device are not UPS-backed.
 - Outage start is persisted on the Unraid flash drive while the LAN is unavailable.
 - Sends one summary after recovery with detected loss time, restoration time and duration.
 
@@ -112,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $recover = (int)($_POST['recovery_threshold'] ?? 2);
 
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            $err = 'Please enter a valid IPv4 address for the Raspberry Pi.';
+            $err = 'Please enter a valid IPv4 address for the monitored network device.';
         } elseif ($interval < 2 || $interval > 300) {
             $err = 'Check interval must be between 2 and 300 seconds.';
         } elseif ($timeout < 1 || $timeout > 10) {
@@ -154,6 +165,7 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 .mpm-actions{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap}
 .mpm-note{color:#777;margin-top:8px;line-height:1.45}
 .mpm-kv{display:grid;grid-template-columns:180px 1fr;gap:7px 14px;margin-top:12px}
+.mpm-copyright{max-width:920px;margin:28px 0 10px;padding:14px 18px;border:2px solid #d65a00;border-radius:8px;text-align:center;font-size:18px;font-weight:700;letter-spacing:.2px}
 </style>
 
 <?php if ($msg): ?><div class="notice"><?=q($msg)?></div><?php endif; ?>
@@ -182,7 +194,7 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
     <option value="no" <?=($cfg['ENABLED'] ?? 'no') !== 'yes' ? 'selected' : ''?>>No</option>
   </select>
 
-  <label for="target_ip">Raspberry Pi IPv4 address</label>
+  <label for="target_ip">Network device IPv4 address</label>
   <input id="target_ip" name="target_ip" type="text" value="<?=q($cfg['TARGET_IP'] ?? '')?>" placeholder="10.10.20.5">
 
   <label for="check_interval">Check interval (seconds)</label>
@@ -225,12 +237,13 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 <?php endif; ?>
 
 <div class="mpm-card">
-  <b>Designed for your network layout</b>
-  <div class="mpm-note">This mode assumes the Raspberry Pi, router and switches are on normal mains while Unraid remains UPS-backed. When the Pi reaches the configured consecutive-failure threshold, the outage is saved on the Unraid flash drive and the plugin immediately asks Unraid to perform its native clean shutdown. The shutdown is stamped into the pending record. On the next boot, once the Pi/network is reachable, Unraid sends one Warning summary through its configured notification agents.</div>
-  <div class="mpm-note"><b>Shutdown behaviour:</b> Reaching the failure threshold automatically powers down Unraid. With the default 5-second interval and four-failure threshold this is intentionally fast, so make sure the monitored Pi has a fixed IP and is normally reliable.</div>
-  <div class="mpm-note"><b>Limitation:</b> because the whole mains-powered network path disappears together, the plugin cannot distinguish a household mains cut from a reboot or failure of the router/switch/Pi. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
+  <b>How this workaround works</b>
+  <div class="mpm-note">This plugin is a workaround for UPS units that cannot directly inform Unraid of a mains power failure. Configure the IPv4 address of a reliable network device that is powered from normal mains and is NOT protected by an uninterruptible power supply (UPS), while Unraid remains UPS-backed. When that device reaches the configured consecutive-failure threshold, the outage is saved on the Unraid flash drive and the plugin immediately asks Unraid to perform its native clean shutdown. On the next boot, once the monitored network device is reachable again, Unraid sends one Warning summary through its configured notification agents.</div>
+  <div class="mpm-note"><b>Shutdown behaviour:</b> Reaching the failure threshold automatically powers down Unraid. With the default 5-second interval and four-failure threshold this is intentionally fast, so make sure the monitored network device has a fixed or DHCP-reserved IPv4 address, is normally reliable, and is not UPS-backed.</div>
+  <div class="mpm-note"><b>Important limitation:</b> this is an inferred mains-failure workaround, not a direct UPS power-failure signal. The plugin cannot distinguish a genuine mains cut from a reboot, failure, cabling problem or other loss of the monitored network device or its network path. Any such loss lasting for the configured failure threshold can trigger a clean Unraid shutdown. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
 </div>
 
+<div class="mpm-copyright">Copyright &copy; Raymond Munro 2026. All rights reserved.</div>
 ]]></INLINE>
 </FILE>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/scripts/mains-power-monitor.sh">
@@ -330,10 +343,10 @@ printf '%s\n' "$$" > "$PID_FILE"
 if load_pending; then
   current="OFFLINE"
   if [[ -n "${DETECTED_BOOT_ID:-}" && "$DETECTED_BOOT_ID" != "$BOOT_ID" ]]; then
-    write_state "RECOVERING" "A pending outage survived an Unraid shutdown/reboot; waiting for the Raspberry Pi/network"
+    write_state "RECOVERING" "A pending outage survived an Unraid shutdown/reboot; waiting for the monitored network device/network"
     log "Pending outage from $START_TEXT survived reboot; current boot=$BOOT_ID"
   else
-    write_state "OFFLINE" "A mains/network outage is already recorded from $START_TEXT; waiting for the Raspberry Pi to return"
+    write_state "OFFLINE" "A mains/network outage is already recorded from $START_TEXT; waiting for the monitored network device to return"
     log "Resuming pending outage recorded at $START_TEXT"
   fi
 else
@@ -359,10 +372,10 @@ while true; do
         if [[ "$rebooted" == "yes" ]]; then
           description="Mains/network loss was detected at $START_TEXT."
           [[ -n "${SHUTDOWN_TEXT:-}" ]] && description+=" Unraid stopped/shut down at $SHUTDOWN_TEXT while the outage was pending."
-          description+=" Unraid started again at approximately $restart_text, and the Raspberry Pi/network was confirmed reachable at $end_text. Time from detected loss until connectivity was confirmed again: $duration_text. Because Unraid was offline for part of this event, the exact mains-restoration time cannot be known."
+          description+=" Unraid started again at approximately $restart_text, and the monitored network device/network was confirmed reachable at $end_text. Time from detected loss until connectivity was confirmed again: $duration_text. Because Unraid was offline for part of this event, the exact mains-restoration time cannot be known."
           subject="Mains Power Restored - Unraid Restarted"
         else
-          description="Mains/network loss was detected at $START_TEXT and the Raspberry Pi/network was confirmed reachable again at $end_text. Detected outage duration: $duration_text."
+          description="Mains/network loss was detected at $START_TEXT and the monitored network device/network was confirmed reachable again at $end_text. Detected outage duration: $duration_text."
           subject="Mains Power Restored - Outage Recorded"
         fi
 
@@ -378,12 +391,12 @@ while true; do
           log "Warning notification command failed after recovery; pending outage retained"
         fi
       else
-        current="ONLINE"; write_state "ONLINE" "Raspberry Pi is reachable; no pending outage record found"
+        current="ONLINE"; write_state "ONLINE" "Monitored network device is reachable; no pending outage record found"
       fi
     elif [[ "$current" == "UNKNOWN" && "$success_count" -ge "$RECOVERY_THRESHOLD" ]]; then
-      current="ONLINE"; write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"; log "Initial state confirmed online"
+      current="ONLINE"; write_state "ONLINE" "Mains/network present; monitored network device is reachable"; log "Initial state confirmed online"
     elif [[ "$current" == "ONLINE" ]]; then
-      write_state "ONLINE" "Mains/network present; Raspberry Pi is reachable"
+      write_state "ONLINE" "Mains/network present; monitored network device is reachable"
     fi
   else
     success_count=0; fail_count=$((fail_count+1))
@@ -475,7 +488,6 @@ case "${1:-}" in
     ;;
   *) echo "Usage: $0 {start|stop|restart|status}"; exit 2 ;;
 esac
-
 ]]></INLINE>
 </FILE>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/scripts/test-notification">
@@ -483,7 +495,6 @@ esac
 #!/bin/bash
 NOTIFY="/usr/local/emhttp/webGui/scripts/notify"
 "$NOTIFY" -e "Unraid Mains Power Monitor" -s "Mains Monitor Test" -d "This is a test notification from the Mains Power Monitor plugin." -i "warning"
-
 ]]></INLINE>
 </FILE>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/event/stopping_svcs">
@@ -522,7 +533,6 @@ if [[ -z "${SHUTDOWN_EPOCH:-}" ]]; then
   logger -t "$NAME" -- "Pending mains/network outage: Unraid stop/shutdown recorded at $SHUTDOWN_TEXT"
 fi
 exit 0
-
 ]]></INLINE>
 </FILE>
 <FILE Run="/bin/bash">
@@ -550,11 +560,13 @@ fi
 "$PLGDIR/scripts/rc.$NAME" start >/dev/null 2>&1 || true
 echo "-----------------------------------------------------------"
 echo " Mains Power Monitor installed"
-echo " Version: 2026.09.04d"
+echo " Version: 2026.09.07b"
 echo " Recovery notifications: Warning via Unraid agents"
 echo " Auto-shutdown: after configured failed checks (default 4)"
+echo " Detector: non-UPS-backed network device IPv4 address"
+echo " Intended for UPS units that cannot directly signal Unraid"
 echo " Pending outages survive Unraid shutdown/reboot"
-echo " Settings: Settings -> Mains Power Monitor"
+echo " Settings: Settings -> User Utilities -> Mains Power Monitor"
 echo "-----------------------------------------------------------"
 ]]></INLINE>
 </FILE>

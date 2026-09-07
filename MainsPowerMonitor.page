@@ -58,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $recover = (int)($_POST['recovery_threshold'] ?? 2);
 
         if (!filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
-            $err = 'Please enter a valid IPv4 address for the Raspberry Pi.';
+            $err = 'Please enter a valid IPv4 address for the monitored network device.';
         } elseif ($interval < 2 || $interval > 300) {
             $err = 'Check interval must be between 2 and 300 seconds.';
         } elseif ($timeout < 1 || $timeout > 10) {
@@ -100,6 +100,7 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 .mpm-actions{margin-top:20px;display:flex;gap:10px;flex-wrap:wrap}
 .mpm-note{color:#777;margin-top:8px;line-height:1.45}
 .mpm-kv{display:grid;grid-template-columns:180px 1fr;gap:7px 14px;margin-top:12px}
+.mpm-copyright{max-width:920px;margin:28px 0 10px;padding:14px 18px;border:2px solid #d65a00;border-radius:8px;text-align:center;font-size:18px;font-weight:700;letter-spacing:.2px}
 </style>
 
 <?php if ($msg): ?><div class="notice"><?=q($msg)?></div><?php endif; ?>
@@ -128,7 +129,7 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
     <option value="no" <?=($cfg['ENABLED'] ?? 'no') !== 'yes' ? 'selected' : ''?>>No</option>
   </select>
 
-  <label for="target_ip">Raspberry Pi IPv4 address</label>
+  <label for="target_ip">Network device IPv4 address</label>
   <input id="target_ip" name="target_ip" type="text" value="<?=q($cfg['TARGET_IP'] ?? '')?>" placeholder="10.10.20.5">
 
   <label for="check_interval">Check interval (seconds)</label>
@@ -171,8 +172,10 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 <?php endif; ?>
 
 <div class="mpm-card">
-  <b>Designed for your network layout</b>
-  <div class="mpm-note">This mode assumes the Raspberry Pi, router and switches are on normal mains while Unraid remains UPS-backed. When the Pi reaches the configured consecutive-failure threshold, the outage is saved on the Unraid flash drive and the plugin immediately asks Unraid to perform its native clean shutdown. The shutdown is stamped into the pending record. On the next boot, once the Pi/network is reachable, Unraid sends one Warning summary through its configured notification agents.</div>
-  <div class="mpm-note"><b>Shutdown behaviour:</b> Reaching the failure threshold automatically powers down Unraid. With the default 5-second interval and four-failure threshold this is intentionally fast, so make sure the monitored Pi has a fixed IP and is normally reliable.</div>
-  <div class="mpm-note"><b>Limitation:</b> because the whole mains-powered network path disappears together, the plugin cannot distinguish a household mains cut from a reboot or failure of the router/switch/Pi. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
+  <b>How this workaround works</b>
+  <div class="mpm-note">This plugin is a workaround for UPS units that cannot directly inform Unraid of a mains power failure. Configure the IPv4 address of a reliable network device that is powered from normal mains and is NOT protected by an uninterruptible power supply (UPS), while Unraid remains UPS-backed. When that device reaches the configured consecutive-failure threshold, the outage is saved on the Unraid flash drive and the plugin immediately asks Unraid to perform its native clean shutdown. On the next boot, once the monitored network device is reachable again, Unraid sends one Warning summary through its configured notification agents.</div>
+  <div class="mpm-note"><b>Shutdown behaviour:</b> Reaching the failure threshold automatically powers down Unraid. With the default 5-second interval and four-failure threshold this is intentionally fast, so make sure the monitored network device has a fixed or DHCP-reserved IPv4 address, is normally reliable, and is not UPS-backed.</div>
+  <div class="mpm-note"><b>Important limitation:</b> this is an inferred mains-failure workaround, not a direct UPS power-failure signal. The plugin cannot distinguish a genuine mains cut from a reboot, failure, cabling problem or other loss of the monitored network device or its network path. Any such loss lasting for the configured failure threshold can trigger a clean Unraid shutdown. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
 </div>
+
+<div class="mpm-copyright">Copyright &copy; Raymond Munro 2026. All rights reserved.</div>

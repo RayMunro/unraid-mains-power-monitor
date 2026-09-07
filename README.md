@@ -1,13 +1,18 @@
 # Mains Power Monitor for Unraid
 
-Uses a mains-powered Raspberry Pi (for example a Pi-hole host) as a proxy
-for mains/network availability while Unraid remains UPS-backed.
+This plugin is a workaround for UPS units that cannot directly report a
+mains power failure to the Unraid server. Instead of a power-failure signal
+from the UPS, Unraid monitors the IPv4 address of a separate network device
+that is powered from normal mains and is **not** protected by an
+uninterruptible power supply (UPS), while Unraid itself remains UPS-backed.
 
 Copyright © 2026 Ray Munro. Licensed under the [GNU GPLv3](LICENSE).
 
 ## Behaviour
 
-- Pings the configured Raspberry Pi IPv4 address.
+- Pings the configured monitored-device IPv4 address.
+- The monitored device must use normal mains power and must not be
+  UPS-backed; Unraid itself should remain powered by the UPS.
 - Records an outage after the configured consecutive failure threshold and
   immediately initiates Unraid's native clean shutdown (`powerdown`).
 - Persists the pending outage under `/boot/config/plugins/mains-power-monitor/`
@@ -21,13 +26,21 @@ Copyright © 2026 Ray Munro. Licensed under the [GNU GPLv3](LICENSE).
   approximate restart time, connectivity-confirmed time, and the
   loss-to-recovery interval.
 
+Choose a device with a fixed/reserved IPv4 address that is normally
+reliable and powered from the same non-UPS mains supply you want to
+monitor — a router, switch, access point, small computer, printer, or
+another always-on network appliance, as long as it isn't UPS-backed.
+
 ## Important limitation
 
-If the router, switches, and Pi are all non-UPS-backed, the plugin detects
-loss of that mains-powered network path, not mains voltage directly. A
-router/switch/Pi reboot can therefore look like a mains outage. If Unraid
-is powered off when mains returns, the exact restoration time cannot be
-observed.
+This plugin does not measure mains voltage and does not receive a hardware
+power-failure signal from the UPS. It infers a probable mains outage from
+the disappearance of a network device deliberately left off UPS power. A
+reboot, failure, cabling problem, or other loss of that device or its
+network path can therefore look like a mains outage and can trigger the
+configured clean shutdown. If Unraid is powered off when mains returns,
+the exact restoration time cannot be observed; the recovery report gives
+the time connectivity was confirmed after Unraid restarted.
 
 ## Safety note
 
