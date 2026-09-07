@@ -52,9 +52,11 @@ or from the terminal:
 plugin install https://raw.githubusercontent.com/RayMunro/unraid-mains-power-monitor/main/mains-power-monitor.plg
 ```
 
-Then open **Settings → Mains Power Monitor** to configure the target IP and
-thresholds. Everything the plugin needs is written by the `.plg` itself, so
-nothing else needs to be downloaded or copied by hand.
+Then open **Settings → User Utilities → Mains Power Monitor** to configure
+the target IP and thresholds. It appears as a compact clickable tile;
+clicking it opens the full settings page. Everything the plugin needs is
+written by the `.plg` itself, so nothing else needs to be downloaded or
+copied by hand.
 
 ## Uninstall
 

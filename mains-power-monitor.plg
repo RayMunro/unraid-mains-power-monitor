@@ -2,18 +2,26 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "mains-power-monitor">
 <!ENTITY author "Ray Munro">
-<!ENTITY version "2026.09.04d">
+<!ENTITY version "2026.09.07">
 <!ENTITY plgdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY cfgdir "/boot/config/plugins/&name;">
+<!ENTITY launch "Settings/MainsPowerMonitor">
 <!ENTITY github "RayMunro/unraid-mains-power-monitor">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
 ]>
-<PLUGIN name="&name;" author="&author;" version="&version;" min="6.12.0" icon="bolt"
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" min="6.12.0" icon="bolt"
         pluginURL="&pluginURL;"
         support="https://github.com/&github;/issues"
         project="https://github.com/&github;"
         readme="https://github.com/&github;#readme">
 <CHANGES>
+### 2026.09.07
+- Moved Mains Power Monitor into the standard Settings -> User Utilities block.
+- The Settings screen now shows a compact clickable Mains Power Monitor icon/tile instead of rendering the full configuration form inline.
+- Clicking the tile opens the existing full settings page.
+- Added an explicit plugin launch target so Installed Plugins opens the same settings page.
+- Monitoring, clean-shutdown, persistence and Warning recovery behaviour are unchanged.
+
 ### 2026.09.04d
 - Fixed Apply and Test Notification producing a blank/white page on current Unraid versions.
 - Both Settings-page POST forms now include Unraid's required CSRF token.
@@ -44,9 +52,10 @@
 </CHANGES>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/MainsPowerMonitor.page">
 <INLINE><![CDATA[
-Menu="Settings:90"
+Menu="Utilities:90"
 Title="Mains Power Monitor"
 Icon="bolt"
+Type="xmenu"
 ---
 <?php
 $name = 'mains-power-monitor';

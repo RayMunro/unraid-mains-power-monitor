@@ -1,6 +1,7 @@
-Menu="Settings:90"
+Menu="Utilities:90"
 Title="Mains Power Monitor"
 Icon="bolt"
+Type="xmenu"
 ---
 <?php
 $name = 'mains-power-monitor';
