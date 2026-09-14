@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "mains-power-monitor">
 <!ENTITY author "Ray Munro">
-<!ENTITY version "2026.09.07b">
+<!ENTITY version "2026.09.14">
 <!ENTITY plgdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY cfgdir "/boot/config/plugins/&name;">
 <!ENTITY launch "Settings/MainsPowerMonitor">
@@ -15,6 +15,9 @@
         project="https://github.com/&github;"
         readme="https://github.com/&github;#readme">
 <CHANGES>
+### 2026.09.14
+- Add a plugin icon, shown on the Settings page and in Community Applications.
+
 ### 2026.09.07b
 - Added a prominent Copyright © Raymond Munro 2026 notice to the Mains Power Monitor settings page.
 - Added the same copyright notice to the source README.
@@ -61,6 +64,39 @@
 ### 2026.09.04
 - Initial release.
 </CHANGES>
+<FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/icon.svg">
+<INLINE><![CDATA[
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Mains Power Monitor</title>
+  <desc id="desc">A power plug with radiating signal waves and a lightning bolt, representing mains-loss detection via a monitored network device.</desc>
+  <defs>
+    <linearGradient id="plugGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3aa0e0"/>
+      <stop offset="1" stop-color="#1f6fb0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- signal / ping waves -->
+  <g stroke="#8fc7ef" stroke-width="12" fill="none" stroke-linecap="round">
+    <path d="M180 150a190 190 0 0 1 152 0"/>
+    <path d="M208 196a130 130 0 0 1 96 0"/>
+  </g>
+
+  <!-- plug body -->
+  <rect x="196" y="224" width="120" height="96" rx="16" fill="url(#plugGrad)"/>
+  <rect x="220" y="196" width="18" height="40" rx="6" fill="url(#plugGrad)"/>
+  <rect x="274" y="196" width="18" height="40" rx="6" fill="url(#plugGrad)"/>
+  <path d="M256 320v40" stroke="#1f6fb0" stroke-width="16" stroke-linecap="round"/>
+
+  <!-- base / outlet -->
+  <rect x="176" y="368" width="160" height="26" rx="13" fill="#0b2a44"/>
+
+  <!-- lightning bolt badge -->
+  <circle cx="356" cy="330" r="46" fill="#f1892c"/>
+  <path d="M362 302l-30 40h20l-8 36 34-44h-20z" fill="#ffffff"/>
+</svg>
+]]></INLINE>
+</FILE>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/MainsPowerMonitor.page">
 <INLINE><![CDATA[
 Menu="Utilities:90"
@@ -166,7 +202,15 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 .mpm-note{color:#777;margin-top:8px;line-height:1.45}
 .mpm-kv{display:grid;grid-template-columns:180px 1fr;gap:7px 14px;margin-top:12px}
 .mpm-copyright{max-width:920px;margin:28px 0 10px;padding:14px 18px;border:2px solid #d65a00;border-radius:8px;text-align:center;font-size:18px;font-weight:700;letter-spacing:.2px}
+.mpm-header{display:flex;align-items:center;gap:14px;margin:0 0 18px}
+.mpm-header img{width:52px;height:52px;flex:none}
+.mpm-header p{margin:0;opacity:.75}
 </style>
+
+<div class="mpm-header">
+  <img src="/plugins/mains-power-monitor/icon.svg" alt="">
+  <p>Detects mains-power loss via a monitored network device and shuts Unraid down cleanly.</p>
+</div>
 
 <?php if ($msg): ?><div class="notice"><?=q($msg)?></div><?php endif; ?>
 <?php if ($err): ?><div class="error"><?=q($err)?></div><?php endif; ?>
@@ -544,7 +588,7 @@ CFGDIR="/boot/config/plugins/$NAME"
 CFG="$CFGDIR/$NAME.cfg"
 mkdir -p "$PLGDIR/scripts" "$PLGDIR/event" "$CFGDIR" "/var/local/$NAME"
 chmod 0755 "$PLGDIR/scripts/mains-power-monitor.sh" "$PLGDIR/scripts/rc.mains-power-monitor" "$PLGDIR/scripts/test-notification" "$PLGDIR/event/stopping_svcs"
-chmod 0644 "$PLGDIR/MainsPowerMonitor.page"
+chmod 0644 "$PLGDIR/MainsPowerMonitor.page" "$PLGDIR/icon.svg"
 if [[ ! -f "$CFG" ]]; then
 cat > "$CFG" <<'CFGEOF'
 ENABLED="no"
@@ -560,7 +604,7 @@ fi
 "$PLGDIR/scripts/rc.$NAME" start >/dev/null 2>&1 || true
 echo "-----------------------------------------------------------"
 echo " Mains Power Monitor installed"
-echo " Version: 2026.09.07b"
+echo " Version: 2026.09.14"
 echo " Recovery notifications: Warning via Unraid agents"
 echo " Auto-shutdown: after configured failed checks (default 4)"
 echo " Detector: non-UPS-backed network device IPv4 address"

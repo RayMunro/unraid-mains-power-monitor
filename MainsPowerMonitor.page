@@ -101,7 +101,15 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
 .mpm-note{color:#777;margin-top:8px;line-height:1.45}
 .mpm-kv{display:grid;grid-template-columns:180px 1fr;gap:7px 14px;margin-top:12px}
 .mpm-copyright{max-width:920px;margin:28px 0 10px;padding:14px 18px;border:2px solid #d65a00;border-radius:8px;text-align:center;font-size:18px;font-weight:700;letter-spacing:.2px}
+.mpm-header{display:flex;align-items:center;gap:14px;margin:0 0 18px}
+.mpm-header img{width:52px;height:52px;flex:none}
+.mpm-header p{margin:0;opacity:.75}
 </style>
+
+<div class="mpm-header">
+  <img src="/plugins/mains-power-monitor/icon.svg" alt="">
+  <p>Detects mains-power loss via a monitored network device and shuts Unraid down cleanly.</p>
+</div>
 
 <?php if ($msg): ?><div class="notice"><?=q($msg)?></div><?php endif; ?>
 <?php if ($err): ?><div class="error"><?=q($err)?></div><?php endif; ?>

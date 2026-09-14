@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.svg" width="160" alt="Mains Power Monitor icon" />
+</p>
+
 # Mains Power Monitor for Unraid
 
 This plugin is a workaround for UPS units that cannot directly report a
