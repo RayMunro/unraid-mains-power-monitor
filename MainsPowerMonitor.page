@@ -186,4 +186,4 @@ $statusClass = ($status === 'ONLINE') ? 'green' : (($status === 'OFFLINE' || $st
   <div class="mpm-note"><b>Important limitation:</b> this is an inferred mains-failure workaround, not a direct UPS power-failure signal. The plugin cannot distinguish a genuine mains cut from a reboot, failure, cabling problem or other loss of the monitored network device or its network path. Any such loss lasting for the configured failure threshold can trigger a clean Unraid shutdown. If Unraid itself is off when mains returns, the exact restoration time cannot be observed; the report therefore gives the time connectivity was confirmed after Unraid restarted.</div>
 </div>
 
-<div class="mpm-copyright">Copyright &copy; Raymond Munro 2026. All rights reserved.</div>
+<div class="mpm-copyright">Copyright &copy; Ray Munro 2026. All rights reserved.</div>
