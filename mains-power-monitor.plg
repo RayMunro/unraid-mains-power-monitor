@@ -14,59 +14,6 @@
         support="https://github.com/&github;/issues"
         project="https://github.com/&github;"
         readme="https://github.com/&github;#readme">
-<CHANGES>
-### 2026.09.14a
-- Fix the install-success message printing a hardcoded old version number instead of the version actually installed (the message lived inside a CDATA install script, so the &amp;version; entity was never expanded there).
-
-### 2026.09.14
-- Add a plugin icon, shown on the Settings page and in Community Applications.
-
-### 2026.09.07b
-- Added a prominent Copyright © Ray Munro 2026 notice to the Mains Power Monitor settings page.
-- Added the same copyright notice to the source README.
-
-### 2026.09.07a
-- Replaced device-specific terminology throughout with generic monitored network-device terminology.
-- The IPv4 field and instructions now make clear that the target must be a reliable network device that is NOT protected by an uninterruptible power supply (UPS).
-- Clarified that Mains Power Monitor is a workaround for UPS units that cannot directly report a mains power failure to the Unraid instance.
-- Clarified that loss of the monitored device or its network path is an inferred mains-failure signal and can also be caused by a device/network fault or reboot.
-- Monitoring, clean-shutdown, persistence and Warning recovery behaviour are unchanged.
-
-### 2026.09.07
-- Moved Mains Power Monitor into the standard Settings -> User Utilities block.
-- The Settings screen now shows a compact clickable Mains Power Monitor icon/tile instead of rendering the full configuration form inline.
-- Clicking the tile opens the existing full settings page.
-- Added an explicit plugin launch target so Installed Plugins opens the same settings page.
-- Monitoring, clean-shutdown, persistence and Warning recovery behaviour are unchanged.
-
-### 2026.09.04d
-- Fixed Apply and Test Notification producing a blank/white page on current Unraid versions.
-- Both Settings-page POST forms now include Unraid's required CSRF token.
-- Existing settings and outage history are preserved during upgrade.
-
-### 2026.09.04c
-- After the configured consecutive monitored network-device failures (default 4), persists the outage and immediately initiates Unraid's native clean shutdown using `powerdown`.
-- Shutdown is requested only after the outage record is safely written to flash.
-- Pending outage/reboot recovery behaviour from 2026.09.04b is retained.
-- Recovery reports remain Warning-level Unraid notifications for delivery through configured agents.
-- Settings page now makes the automatic shutdown behaviour explicit.
-
-### 2026.09.04b
-- Recovery reports are always Warning-level Unraid notifications so configured agents can deliver them to phones and other endpoints.
-- Pending outages now survive a complete Unraid shutdown/reboot.
-- Records the Unraid stop/shutdown time when an outage is pending.
-- On the next boot, recognises the same pending outage and waits for the monitored network device/network to return before reporting it.
-- Recovery report includes outage detection, Unraid stop/shutdown time when available, approximate restart time, connectivity-confirmed time and duration.
-- Makes clear when exact mains-restoration time cannot be known because Unraid was itself powered off.
-
-### 2026.09.04a
-- Added delayed outage reporting for networks where the router, switches and monitored network device are not UPS-backed.
-- Outage start is persisted on the Unraid flash drive while the LAN is unavailable.
-- Sends one summary after recovery with detected loss time, restoration time and duration.
-
-### 2026.09.04
-- Initial release.
-</CHANGES>
 <FILE Name="/usr/local/emhttp/plugins/mains-power-monitor/icon.svg">
 <INLINE><![CDATA[
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
